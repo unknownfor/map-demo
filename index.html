@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type"
+        content="text/html; charset=utf-8" />
+    <meta name="viewport"
+        content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+        body,
+        html,
+        #map {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            margin: 0;
+            font-family: "微软雅黑";
+        }
+
+        .header-wrap {
+            position: fixed;
+            bottom: 0px;
+            z-index: 999;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+    </style>
+    <script src="https://api.map.baidu.com/api?v=2.0&ak=TU7B252W9eHZyPG8OhU9Bx0GBHeDyhq8"></script>
+    <script src="./geo.js"></script>
+    <title>地图展示</title>
+</head>
+
+<body>
+    <div class="header-wrap">
+        <label for="sqfile">导入商圈数据:</label>
+        <input type="file"
+            class="csv-file-input"
+            id="sqfile" />
+
+        <label for="file">导入栅格数据:</label>
+        <input type="file"
+            class="csv-file-input"
+            id="file" />
+
+
+        <button class="export">导出在区域中的坐标点</button>
+
+        <button class="reset">重置</button>
+
+    </div>
+    <div id="map"></div>
+</body>
+
+</html>
+<script>
+    const BOM = '\uFEFF'
+    let exportJson = [] // 百度地图API功能
+    let exportFileName = 'export'
+    let isPolygon = null
+
+    let map = new BMap.Map('map', {
+        enableDblclickZoom: false,
+        displayOptions: {
+            building: false
+        }
+    })
+
+    const file = document.getElementById('file')
+    const sqfile = document.getElementById('sqfile')
+    const exportBtn = document.querySelector('.export')
+    const resetBtn = document.querySelector('.reset')
+
+    map.centerAndZoom(new BMap.Point(113.893619, 22.560881), 16) // 初始化地图,设置中心点坐标和地图级别
+    map.enableScrollWheelZoom(true) //开启鼠标滚轮缩放
+
+    function csvToObject(csvString) {
+        const csvarry = csvString.split("\r\n")
+        const datas = [];
+        const headers = csvarry[0].split(",")
+        for (let i = 1; i < csvarry.length; i++) {
+            const data = {}
+            const temp = csvarry[i].split(",")
+            for (let j = 0; j < temp.length; j++) {
+                data[headers[j]] = temp[j]
+            }
+            datas.push(data)
+        }
+        return datas
+    }
+
+
+    resetBtn.addEventListener('click', () => {
+        exportJson = [] // 百度地图API功能
+        exportFileName = 'export'
+        isPolygon = null
+        map.clearOverlays()
+    })
+
+    function exportCsv(inputData, filename = `${exportFileName}.json`) {
+        let uri = encodeURI(`data:text/json;charset=utf-8,${BOM}${inputData}`)
+        let downloadLink = document.createElement('a')
+        downloadLink.href = uri
+        downloadLink.download = filename
+        document.body.appendChild(downloadLink)
+        downloadLink.click()
+        document.body.removeChild(downloadLink)
+    }
+
+    function addPolygon(polygon) {
+        isPolygon = new BMap.Polygon(polygon, {
+            fillColor: 'red', // 填充颜色。当参数为空时，折线覆盖物没有填充效果。
+            fillOpacity: 0.4, // 填充透明度
+            // strokeColor: '#ccc', // 边线颜色
+            // strokeWeight: 1, // 边线宽度，以像素为单位
+            strokeOpacity: 0, // 边线透明度，取值范围0- 1
+            strokeStyle: 'dashed' // 边线样式，solid或dashed
+        })
+        map.addOverlay(isPolygon)
+    }
+
+
+    exportBtn.addEventListener('click', () => {
+        if (exportJson.length === 0) {
+            alert('没有任何数据可以导出')
+            return
+        }
+        exportCsv(JSON.stringify(exportJson, null, 4))
+    })
+
+    sqfile.addEventListener('change', (e) => { // 商圈数据导入
+        const reader = new FileReader()
+        const file = e.target.files[0]
+        e.target.value = '';
+        [exportFileName] = file.name.split('.')
+        reader.readAsText(file)
+        reader.onload = function () {
+            const arr = csvToObject(this.result)
+            const positions = []
+            for (const item of arr) {
+                positions.push([item.lng, item.lat])
+            }
+            addPolygon(positions.join(';'))
+        }
+    })
+
+    file.addEventListener('change', (e) => {
+        const file = e.target.files[0]
+        e.target.value = ''
+        if (!isPolygon) {
+            alert('请先导入商圈数据')
+            return
+        }
+        exportJson = []
+        const reader = new FileReader()
+        reader.readAsText(file)
+        reader.onload = function () {
+            const arr = csvToObject(this.result)
+            for (const item of arr) {
+                // 判断是否存在圈里面
+                if (BMapLib.GeoUtils.isPointInPolygon(new BMap.Point(item.lng, item.lat), isPolygon)) {
+                    map.addOverlay(new BMap.Marker(new BMap.Point(item.lng, item.lat))) // 将标注添加到地图中
+                    exportJson.push(item)
+                }
+            }
+        }
+    })
+</script>
+
+<script>
+
+</script>
